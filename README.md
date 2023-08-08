@@ -23,6 +23,19 @@ npm install
 ブラウザから自身のトークンを取ってくる理由は自分のフォローしている鍵垢のツイートをポストするためです。
 
 必要ない場合 platform.twitter.com/embed のAPIなどを使うといいかと思います。
+
+## 起動方法
+linuxの場合
+```sh
+node index.js 2>&1|tee -a logs.txt
+```
+で起動するとログも取れていいのではないかと思います。
+
+windowsの場合はよくわかりませんが、
+```sh
+node index.js
+```
+とやれば起動はできます。
 ## botの操作
 ```
 /dimg
