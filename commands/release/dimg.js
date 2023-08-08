@@ -167,8 +167,9 @@ module.exports = {
 				twitter_user_data.name = tweet_user_data_json.legacy.name;
 				twitter_user_data.profile_image = tweet_user_data_json.legacy.profile_image_url_https.replace('_normal.','.');
 				twitter_user_data.urls = tweet_user_data_json.legacy.entities;
-				twitter_tweet_data.hashtags = get_only_particular_key_value(tweet_tweet_data_json.entities,"hashtags.text",[]);
-				twitter_tweet_data.user_mentions = get_only_particular_key_value(tweet_tweet_data_json.entities,"user_mentions.screen_name",[]);
+				twitter_tweet_data.hashtags = get_only_particular_key_value(tweet_tweet_data_json.entities,"hashtags",[]);
+				twitter_tweet_data.user_mentions = get_only_particular_key_value(tweet_tweet_data_json.entities,"user_mentions",[]);
+				twitter_tweet_data.symbols = get_only_particular_key_value(tweet_tweet_data_json.entities,"symbols",[]);
 			}else if(response_data.APIsource == "1_1"){
 				var twitter_1_1_json = response_data;
 				tweet_user_data_json = twitter_1_1_json.user;
@@ -178,8 +179,9 @@ module.exports = {
 				twitter_user_data.name = tweet_user_data_json.name;
 				twitter_user_data.profile_image = tweet_user_data_json.profile_image_url_https.replace('_normal.','.');
 				twitter_user_data.urls = tweet_user_data_json.entities;
-				twitter_tweet_data.hashtags = get_only_particular_key_value(tweet_tweet_data_json.entities,"hashtags.text",[]);
-				twitter_tweet_data.user_mentions = get_only_particular_key_value(tweet_tweet_data_json.entities,"user_mentions.screen_name",[]);
+				twitter_tweet_data.hashtags = get_only_particular_key_value(tweet_tweet_data_json.entities,"hashtags",[]);
+				twitter_tweet_data.user_mentions = get_only_particular_key_value(tweet_tweet_data_json.entities,"user_mentions",[]);
+				twitter_tweet_data.symbols = get_only_particular_key_value(tweet_tweet_data_json.entities,"symbols",[]);
 			}
 			
 			try{
@@ -196,25 +198,66 @@ module.exports = {
 			twitter_tweet_data.created_at = new Date(tweet_tweet_data_json.created_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
 			twitter_tweet_data.urls = tweet_tweet_data_json.entities.urls;
 			twitter_tweet_data.media = make_media_list(twitter_tweet_data.extended_entities,select_pages);
-			twitter_tweet_data.hashtags.forEach(target => {
-				twitter_tweet_data.full_text = twitter_tweet_data.full_text.replace(new RegExp(`(#|＃)${target}(?=(\\s|$|\\u3000|\\W)(?!\\.|,))`, 'gu'), `[#${target}](https://twitter.com/hashtag/${target})`);
-			});
-			twitter_tweet_data.user_mentions.forEach(target =>{
-				twitter_tweet_data.full_text = twitter_tweet_data.full_text.replace(new RegExp(`@${target}(?=(\\s|$|\\u3000|\\W)(?!\\.|,))`, 'gu'), `[@${target}](https://twitter.com/${target})`);
-			});
 			try{
 				//文が長すぎるとエラーになるので一定の長さで切る。
 				//普通のツイートではそんなことありえないが、Blueでは長いツイートが可能なのでそれに対応している。
 				let note_tweet = twitter_qraphql_json.result.note_tweet?.note_tweet_results.result||twitter_qraphql_json.result.tweet.note_tweet.note_tweet_results.result;
 				twitter_tweet_data.full_text = str_max_length(note_tweet.text,7000);
 				twitter_tweet_data.urls = note_tweet.entity_set.urls;
-				get_only_particular_key_value(note_tweet.entity_set,"hashtags.text",[]).forEach(target =>{
-					twitter_tweet_data.full_text = twitter_tweet_data.full_text.replace(new RegExp(`(#|＃)${target}(?=(\\s|$|\\u3000|\\W)(?!\\.|,))`, 'gu'), `[#${target}](https://twitter.com/hashtag/${target})`);
-				});
-				get_only_particular_key_value(note_tweet.entity_set,"user_mentions.screen_name",[]).forEach(target =>{
-					twitter_tweet_data.full_text = twitter_tweet_data.full_text.replace(new RegExp(`@${target}(?=(\\s|$|\\u3000|\\W)(?!\\.|,))`, 'gu'), `[@${target}](https://twitter.com/${target})`);
-				});
+				twitter_tweet_data.hashtags = get_only_particular_key_value(note_tweet.entity_set,"hashtags",[]);
+				twitter_tweet_data.user_mentions = get_only_particular_key_value(note_tweet.entity_set,"user_mentions",[]);
+				twitter_tweet_data.symbols = get_only_particular_key_value(note_tweet.entity_set,"symbols",[]);
 			}catch{}
+			function countSurrogatePairs(str){
+				return Array.from(str).filter(char => char.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]/)).length;
+			}
+			let combined = [].concat(
+				twitter_tweet_data.hashtags.map(tag => ({
+					type: 'hashtag',
+					indices: tag.indices,
+					text: tag.text
+				})),
+				twitter_tweet_data.user_mentions.map(mention => ({
+					type: 'mention',
+					indices: mention.indices,
+					text: mention.screen_name
+				})),
+				twitter_tweet_data.symbols.map(symbol => ({
+					type: 'symbol',
+					indices: symbol.indices,
+					text: symbol.text
+				}))
+			);
+
+
+			// combinedをindicesの順にソート
+			combined.sort((a, b) => b.indices[0] - a.indices[0]);
+			let transformedText = twitter_tweet_data.full_text;
+
+			combined.forEach(item => {
+				let start = item.indices[0];
+				let end = item.indices[1];
+
+				// サロゲートペアの数をカウントして調整
+				const adjustment = countSurrogatePairs(transformedText.slice(0, end));
+				start += adjustment;
+				end += adjustment;
+
+				let replacement = '';
+				switch(item.type){
+					case 'hashtag':
+						replacement = `[#${item.text}](https://twitter.com/hashtag/${item.text})`;
+						break;
+					case 'mention':
+						replacement = `[@${item.text}](https://twitter.com/${item.text})`;
+						break;
+					case 'symbol':
+						replacement = `[$${item.text}](https://twitter.com/search?q=%24${item.text}&src=cashtag_click)`;
+						break;
+				}
+				transformedText = transformedText.slice(0, start) + replacement + transformedText.slice(end);
+			});
+			twitter_tweet_data.full_text = str_max_length(transformedText,7000);
 			try{
 				//複数メディアをつけるオプションのときに動画があるとうまくいかないので。
 				if(select_pages.length > 1 && ! twitter_tweet_data.media.every(v => v.media_type == "photo")){return}
@@ -242,7 +285,7 @@ module.exports = {
 				}
 			}catch{}
 			if(quoted_tweet_mode == 0 && (twitter_qraphql_json?.result.quoted_status_result||twitter_1_1_json?.quoted_status)){
-				let tmp_quoted_data =  twitter_qraphql_json?.result.quoted_status_result||twitter_1_1_json?.quoted_status;
+				let tmp_quoted_data = twitter_qraphql_json?.result.quoted_status_result||twitter_1_1_json?.quoted_status;
 				tmp_quoted_data.APIsource = response_data.APIsource
 				return_object.push({"quoted_tweet_data": tmp_quoted_data})
 				return return_object
@@ -418,6 +461,7 @@ module.exports = {
 							//discord.jsで扱いやすいいい感じにしてくれる。
 							return_images[target] = new AttachmentBuilder(download_image, { name: image_urls[target].split("/").pop() });
 						}
+						console.log(return_images)
 						return resolve(return_images);
 					}else{
 						return reject(undefined);
