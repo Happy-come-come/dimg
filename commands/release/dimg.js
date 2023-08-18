@@ -77,7 +77,7 @@ module.exports = {
 		}],
 	},
 	async execute(interaction) {
-		if(interaction.options.getString('url').match(/^(https?:\/\/.*twitter\.com\/.*\/.*\/[0-9]{15,}|https?:\/\/.*pixiv\.net\/artworks\/[0-9]{5,}(\/\?.*)?|https?:\/\/misskey.io\/notes\/[\w]*)(?!.*(\ |\<|\>|\*|\||\;|\[|\]|\{|\}|\"|\'|\(|\)|\$|\`|\\|\!).*).*$/)){
+		if(interaction.options.getString('url').match(/^(https?:\/\/.*(twitter|[xX])\.com\/.*\/.*\/[0-9]{15,}|https?:\/\/.*pixiv\.net\/artworks\/[0-9]{5,}(\/\?.*)?|https?:\/\/misskey.io\/notes\/[\w]*)(?!.*(\ |\<|\>|\*|\||\;|\[|\]|\{|\}|\"|\'|\(|\)|\$|\`|\\|\!).*).*$/)){
 			//インタラクションを返しとかないとエラーが出るからなんかしらメッセージを送る。
 			await interaction.reply({content: 'ちょっとまってな……', ephemeral: true});
 			if (interaction.options.getBoolean('post_to_gazou') == true){
@@ -104,7 +104,7 @@ module.exports = {
 			var contents_for_post;
 			try{
 				switch(true){
-					case /^https?:\/\/.*twitter\.com\/.*\/status\/[0-9]{1,}/.test(interaction.options.getString('url')):
+					case /^https?:\/\/.*(twitter|[xX])\.com\/.*\/status\/[0-9]{1,}/.test(interaction.options.getString('url')):
 						contents_for_post = await when_twitter(interaction.options.getString('url').match(/status\/[0-9]{1,}/)[0].split('/')[1],select_media,interaction.options.getBoolean('use_graphql'));
 						if(interaction.options.getBoolean('dont_post_quoted') !== true && contents_for_post[contents_for_post.length - 1].quoted_tweet_data){
 							//「when_twitter」関数に「1」を立てて引用ツイートかどうかを確かめている。
